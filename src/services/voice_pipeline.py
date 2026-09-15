@@ -3,12 +3,14 @@
 Manages bidirectional communication between:
 Twilio WebSocket ↔ Deepgram STT ↔ Gemini LLM ↔ ElevenLabs TTS ↔ Twilio WebSocket
 and tracks per-turn latency milestones.
+Includes barge-in (interruption) detection.
 """
 
 import asyncio
 from typing import AsyncGenerator, Callable, List, Optional
 from src.config import settings
 from src.services.audio_utils import mulaw_to_base64
+from src.services.bargein_controller import BargeInController
 from src.services.latency_tracker import CallLatencyTracker
 from src.services.llm_service import GeminiLLMService
 from src.services.stt_service import DeepgramSTTService
@@ -43,6 +45,9 @@ class VoicePipelineSession:
         self._is_processing_turn = False
         self._is_greeting_sent = False
 
+        # Phase 2: Barge-in controller
+        self.bargein = BargeInController(call_sid)
+
     async def start(self) -> None:
         """Initializes the STT connection and sends the initial AI disclosure greeting."""
         logger.info(f"Starting VoicePipelineSession for Call {self.call_sid}")
@@ -76,16 +81,32 @@ class VoicePipelineSession:
 
         logger.info(f"STT [{self.call_sid}] (final={is_final}, speech_final={speech_final}): {transcript}")
 
+        # Phase 2: Barge-in — if bot is mid-response and caller speaks, cancel immediately
+        if self.bargein.detect_interruption(transcript, is_final):
+            cancelled = self.bargein.cancel_active_turn()
+            if cancelled:
+                self._is_processing_turn = False
+                asyncio.create_task(self._flush_twilio_audio())
+
         # Trigger LLM response when an utterance is finished
         if speech_final or (is_final and not self._is_processing_turn):
-            asyncio.create_task(self._process_turn(transcript))
+            self._is_processing_turn = True
+            turn_task = asyncio.create_task(self._process_turn(transcript))
+            self.bargein.set_turn_task(turn_task)
+
+    async def _flush_twilio_audio(self) -> None:
+        """Sends a Twilio clear event to stop any buffered audio playback mid-stream."""
+        try:
+            await self.send_to_twilio({
+                "event": "clear",
+                "streamSid": self.stream_sid
+            })
+            logger.info(f"Twilio audio buffer flushed for Call {self.call_sid} after barge-in.")
+        except Exception as e:
+            logger.error(f"Error flushing Twilio audio: {e}")
 
     async def _process_turn(self, user_utterance: str) -> None:
         """Executes a single conversational turn: LLM token streaming -> TTS -> Twilio."""
-        if self._is_processing_turn:
-            return
-        self._is_processing_turn = True
-
         turn = self.latency_tracker.start_new_turn()
         turn.mark_caller_speech_end()
         turn.mark_stt_final()
@@ -123,8 +144,10 @@ class VoicePipelineSession:
                     break
                 yield token
 
-        # Launch LLM worker in background
-        asyncio.create_task(llm_worker())
+        # Launch LLM worker
+        llm_task = asyncio.create_task(llm_worker())
+        if not self.bargein.is_bot_speaking:
+            self.bargein.set_turn_task(asyncio.current_task())
 
         # Stream generated audio to Twilio
         try:
@@ -141,9 +164,14 @@ class VoicePipelineSession:
             # If ElevenLabs quota was exhausted, log and trigger Twilio fallback
             if self.tts.quota_exhausted:
                 logger.warning(f"Quota exhausted for Call {self.call_sid}. Notifying fallback.")
+        except asyncio.CancelledError:
+            logger.info(f"Turn #{turn.turn_id} cancelled by barge-in for Call {self.call_sid}.")
         except Exception as e:
             logger.error(f"Error during turn processing: {e}")
         finally:
+            if not llm_task.done():
+                llm_task.cancel()
+            self.bargein.clear_turn_task()
             if turn.t_twilio_send:
                 turn.log_metrics()
             self._is_processing_turn = False

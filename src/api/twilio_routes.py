@@ -4,6 +4,7 @@ import json
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from src.config import settings
 from src.services.audio_utils import base64_to_mulaw
+from src.services.idempotency import idempotency_store
 from src.services.voice_pipeline import VoicePipelineSession
 from src.utils.logger import get_logger
 
@@ -24,6 +25,15 @@ async def inbound_voice_webhook(request: Request):
     to_number = form_data.get("To", "UNKNOWN")
 
     logger.info(f"Inbound call received: CallSid={call_sid}, From={from_number}, To={to_number}")
+
+    # Phase 2: Idempotency guard — reject duplicate webhook deliveries
+    if not idempotency_store.check_and_set(call_sid):
+        logger.warning(f"Duplicate webhook rejected for CallSid={call_sid}")
+        return Response(
+            content="""<?xml version="1.0" encoding="UTF-8"?>
+<Response><Hangup/></Response>""",
+            media_type="application/xml"
+        )
 
     # Determine host for WebSocket URL
     host = request.headers.get("host", f"localhost:{settings.PORT}")
@@ -96,6 +106,7 @@ async def twilio_media_stream_websocket(websocket: WebSocket):
                 logger.info(f"Twilio Media Stream stopped for CallSid={call_sid}")
                 if session:
                     await session.close()
+                idempotency_store.release(call_sid)
                 break
 
     except WebSocketDisconnect:
@@ -103,5 +114,6 @@ async def twilio_media_stream_websocket(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Twilio WebSocket error: {e}")
     finally:
+        idempotency_store.release(call_sid)
         if session:
             await session.close()
