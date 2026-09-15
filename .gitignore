@@ -1,0 +1,13 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.pytest_cache/
+*.log
+
+# Sensitive planning & reference files (do not publish to repository)
+MASTERPLAN.md
+UPGRADE_ADDENDUM.md
+rfer
