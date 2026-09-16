@@ -48,5 +48,10 @@ class Settings(BaseSettings):
     DEFAULT_BUSINESS_ID: str = "biz_default"
     DEFAULT_ESCALATION_NUMBER: Optional[str] = None
 
+    # Database & Multi-Tenant Vector Settings
+    DATABASE_URL: str = "sqlite+aiosqlite:///./vani.db"
+    MAX_CHUNKS_PER_BUSINESS: int = 10000
+    EMBEDDING_DIMENSION: int = 768
+
 
 settings = Settings()
