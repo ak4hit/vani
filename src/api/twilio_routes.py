@@ -4,6 +4,7 @@ import json
 from fastapi import APIRouter, Request, Response, WebSocket, WebSocketDisconnect
 from src.config import settings
 from src.services.audio_utils import base64_to_mulaw
+from src.services.business_store import business_store
 from src.services.idempotency import idempotency_store
 from src.services.voice_pipeline import VoicePipelineSession
 from src.utils.logger import get_logger
@@ -17,7 +18,7 @@ async def inbound_voice_webhook(request: Request):
     """Twilio incoming voice webhook.
 
     Returns TwiML instructing Twilio to establish a bidirectional Media Stream
-    WebSocket connection to /twilio/stream.
+    WebSocket connection to /twilio/stream, or routes to escalation/voicemail if paused.
     """
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "UNKNOWN")
@@ -34,6 +35,25 @@ async def inbound_voice_webhook(request: Request):
 <Response><Hangup/></Response>""",
             media_type="application/xml"
         )
+
+    # Phase 3: Pause guard — if bot is paused, forward to escalation or voicemail
+    business = business_store.get_business(settings.DEFAULT_BUSINESS_ID)
+    if business and business.is_paused:
+        logger.info(f"Bot is PAUSED for business '{business.business_name}'. Handling new call CallSid={call_sid}")
+        if business.escalation_number:
+            twiml_paused = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Our automated assistant is paused. Connecting you directly to our staff.</Say>
+    <Dial>{business.escalation_number}</Dial>
+</Response>"""
+        else:
+            twiml_paused = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Our automated assistant is temporarily paused. Please leave a message after the tone or call back later.</Say>
+    <Record maxLength="60" />
+    <Hangup/>
+</Response>"""
+        return Response(content=twiml_paused, media_type="application/xml")
 
     # Determine host for WebSocket URL
     host = request.headers.get("host", f"localhost:{settings.PORT}")

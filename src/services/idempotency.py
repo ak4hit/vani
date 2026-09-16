@@ -56,6 +56,10 @@ class IdempotencyStore:
         """Remove a call_sid from the store (called on call end for memory hygiene)."""
         self._store.pop(call_sid, None)
 
+    def clear(self) -> None:
+        """Clear all records from the store (useful for testing)."""
+        self._store.clear()
+
 
 # Module-level singleton shared across all webhook invocations
 idempotency_store = IdempotencyStore()

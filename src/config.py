@@ -41,5 +41,12 @@ class Settings(BaseSettings):
     TWILIO_SAMPLE_RATE: int = 8000
     TWILIO_CHANNELS: int = 1
 
+    # Telegram Admin Bot Settings
+    TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_RATE_LIMIT_CALLS: int = 10
+    TELEGRAM_RATE_LIMIT_WINDOW_SEC: int = 60
+    DEFAULT_BUSINESS_ID: str = "biz_default"
+    DEFAULT_ESCALATION_NUMBER: Optional[str] = None
+
 
 settings = Settings()
