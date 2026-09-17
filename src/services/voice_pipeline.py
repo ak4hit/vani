@@ -53,6 +53,7 @@ class VoicePipelineSession:
 
         # Phase 2: Barge-in controller
         self.bargein = BargeInController(call_sid)
+        self._quota_alert_sent = False
 
     async def start(self) -> None:
         """Initializes the STT connection and sends the initial AI disclosure greeting."""
@@ -190,9 +191,20 @@ class VoicePipelineSession:
                 if turn.t_twilio_send is None:
                     turn.mark_twilio_send()
 
-            # If ElevenLabs quota was exhausted, log and trigger Twilio fallback
-            if self.tts.quota_exhausted:
-                logger.warning(f"Quota exhausted for Call {self.call_sid}. Notifying fallback.")
+            # If ElevenLabs quota was exhausted, log and trigger Twilio fallback notification
+            if self.tts.quota_exhausted and not self._quota_alert_sent:
+                self._quota_alert_sent = True
+                logger.warning(f"Quota exhausted for Call {self.call_sid}. Dispatching admin fallback alert.")
+                from src.services.notification_service import notification_service
+                from src.services.business_store import business_store
+                biz = business_store.get_business(self.business_id)
+                if biz and biz.chat_id:
+                    asyncio.create_task(
+                        notification_service.send_tts_quota_alert(
+                            chat_id=biz.chat_id,
+                            business_name=biz.business_name
+                        )
+                    )
         except asyncio.CancelledError:
             logger.info(f"Turn #{turn.turn_id} cancelled by barge-in for Call {self.call_sid}.")
         except Exception as e:

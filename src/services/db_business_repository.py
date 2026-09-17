@@ -197,3 +197,44 @@ class BusinessRepository:
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def delete_caller_records(
+        session: AsyncSession,
+        business_id: str,
+        caller_number: str
+    ) -> Dict[str, Any]:
+        """Permanently delete all call logs and transcripts for a caller number (GDPR / DPDP forget-me flow).
+
+        CRITICAL COMPLIANCE & SECURITY RULE:
+        Deletion is strictly tenant-scoped (`WHERE business_id = :business_id`).
+        Business A cannot delete any records belonging to Business B.
+        """
+        from sqlalchemy import or_
+        raw_number = caller_number.strip()
+        digits_only = "".join(c for c in raw_number if c.isdigit())
+
+        conditions = [CallLog.caller_number == raw_number]
+        if digits_only and len(digits_only) >= 4:
+            conditions.append(CallLog.caller_number.like(f"%{digits_only[-10:]}%"))
+
+        stmt = (
+            delete(CallLog)
+            .where(CallLog.business_id == business_id)
+            .where(or_(*conditions))
+        )
+        result = await session.execute(stmt)
+        await session.commit()
+        deleted_count = result.rowcount if result.rowcount is not None else 0
+
+        logger.info(
+            f"GDPR Forget-Me executed: Deleted {deleted_count} call logs for caller='{caller_number}' "
+            f"scoped to business_id='{business_id}'"
+        )
+
+        return {
+            "business_id": business_id,
+            "caller_number": caller_number,
+            "deleted_call_logs": deleted_count,
+            "success": True
+        }

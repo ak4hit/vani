@@ -265,4 +265,32 @@ class NotificationService:
         return await self.send_telegram_message(chat_id=chat_id, text=card_msg)
 
 
+    @staticmethod
+    def format_tts_quota_alert(
+        business_name: str,
+        renewal_hint: Optional[str] = None
+    ) -> str:
+        """Format an alert when ElevenLabs TTS quota is exhausted and fallback voice is activated."""
+        renewal_text = f"until {renewal_hint}." if renewal_hint else "until your billing cycle renewal."
+        return (
+            "⚠️ *ElevenLabs TTS Quota Alert*\n\n"
+            f"• *Business:* {business_name}\n"
+            f"• *Status:* Primary ElevenLabs quota exhausted or unavailable.\n\n"
+            "🛡️ *Automatic Resilience:* Calls will automatically operate using Twilio fallback voice "
+            f"{renewal_text}\n"
+            "Calls are NOT being dropped. Please upgrade or renew your ElevenLabs quota to restore premium AI voice cloning."
+        )
+
+    async def send_tts_quota_alert(
+        self,
+        chat_id: int,
+        business_name: str,
+        renewal_hint: Optional[str] = None
+    ) -> bool:
+        """Send quota exhaustion notification to business owner."""
+        text = self.format_tts_quota_alert(business_name, renewal_hint)
+        logger.warning(f"Sending TTS quota fallback alert to chat_id={chat_id}")
+        return await self.send_telegram_message(chat_id=chat_id, text=text)
+
+
 notification_service = NotificationService()

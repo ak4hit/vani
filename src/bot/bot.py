@@ -35,6 +35,7 @@ from src.bot.handlers.voice import (
     handle_voice_consent_callback,
     handle_voice_design_command,
 )
+from src.bot.handlers.privacy import handle_delete_caller_command
 
 logger = get_logger("vani.bot")
 
@@ -71,10 +72,11 @@ def build_application(token: Optional[str] = None) -> Application:
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_audio_upload))
     app.add_handler(CallbackQueryHandler(handle_voice_consent_callback, pattern=r"^consent_voice_"))
 
-    # Register Control commands
+    # Register Control & Privacy commands
     app.add_handler(CommandHandler("pause", pause_command))
     app.add_handler(CommandHandler("resume", resume_command))
     app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("deletecaller", handle_delete_caller_command))
 
     # Register Simulation command
     app.add_handler(CommandHandler("test", handle_test_command))

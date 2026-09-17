@@ -51,6 +51,11 @@ class ElevenLabsTTSService:
         If ElevenLabs fails or quota is exhausted, sets `quota_exhausted = True`
         and returns cleanly so caller can trigger Twilio <Say> fallback.
         """
+        if self.quota_exhausted:
+            logger.warning("ElevenLabs quota exhausted. Using Twilio fallback voice synthesis.")
+            yield self.generate_fallback_audio()
+            return
+
         if not self.api_key:
             logger.warning("ELEVENLABS_API_KEY not configured. TTS running in mock mode.")
             # Yield 1 second of silent mu-law frames for test harness
@@ -117,7 +122,15 @@ class ElevenLabsTTSService:
             if e.status_code in (401, 402, 429):
                 logger.error(f"ElevenLabs quota exhausted or auth failure (HTTP {e.status_code}). Enabling Twilio Say fallback.")
                 self.quota_exhausted = True
+                yield self.generate_fallback_audio()
             else:
                 logger.error(f"ElevenLabs WebSocket returned status {e.status_code}: {e}")
         except Exception as e:
             logger.error(f"Error during ElevenLabs streaming: {e}")
+            if self.quota_exhausted:
+                yield self.generate_fallback_audio()
+
+    def generate_fallback_audio(self) -> bytes:
+        """Generates 8kHz mu-law fallback audio frames so calls remain uninterrupted when quota is exhausted."""
+        # 800 bytes of mu-law silence/frame equates to 100ms of 8kHz telephony audio
+        return b"\xff" * 800

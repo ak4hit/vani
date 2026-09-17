@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.health_routes import router as health_router
 from src.api.twilio_routes import router as twilio_router
+from src.api.privacy_routes import router as privacy_router
 from src.config import settings
 from src.utils.logger import get_logger
 
@@ -40,6 +41,7 @@ app.add_middleware(
 # Mount API routers
 app.include_router(health_router)
 app.include_router(twilio_router)
+app.include_router(privacy_router)
 
 
 if __name__ == "__main__":
