@@ -138,5 +138,57 @@ class BusinessStore:
             self._chat_to_biz.clear()
             self._next_faq_id = 1
 
+    async def load_from_db(self, session, business_id: str) -> Optional[BusinessProfile]:
+        """Fetch business from persistent database repository and sync to memory cache."""
+        from src.services.db_business_repository import BusinessRepository
+        db_biz = await BusinessRepository.get_business(session, business_id)
+        if not db_biz:
+            return None
+        faqs = await BusinessRepository.list_faqs(session, business_id)
+        faq_items = [FAQItem(id=f.id, question=f.question, answer=f.answer) for f in faqs]
+        profile = BusinessProfile(
+            business_id=db_biz.id,
+            chat_id=db_biz.chat_id,
+            business_name=db_biz.business_name,
+            industry=db_biz.industry,
+            description=db_biz.description,
+            agent_name=db_biz.agent_name,
+            hours=db_biz.hours,
+            phone_number=db_biz.phone_number,
+            escalation_number=db_biz.escalation_number,
+            is_paused=db_biz.is_paused,
+            faqs=faq_items
+        )
+        with self._lock:
+            self._businesses[business_id] = profile
+            if profile.chat_id:
+                self._chat_to_biz[profile.chat_id] = business_id
+        return profile
+
+    async def save_to_db(self, session, business_id: str) -> Optional[Any]:
+        """Persist current in-memory business state to the database repository."""
+        from src.services.db_business_repository import BusinessRepository
+        profile = self.get_business(business_id)
+        if not profile:
+            return None
+        db_biz = await BusinessRepository.get_or_create_business(
+            session,
+            business_id=profile.business_id,
+            chat_id=profile.chat_id
+        )
+        await BusinessRepository.update_profile(
+            session,
+            business_id=profile.business_id,
+            business_name=profile.business_name,
+            industry=profile.industry,
+            description=profile.description,
+            agent_name=profile.agent_name,
+            hours=profile.hours,
+            phone_number=profile.phone_number,
+            escalation_number=profile.escalation_number,
+            is_paused=profile.is_paused
+        )
+        return db_biz
+
 
 business_store = BusinessStore()
