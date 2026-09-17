@@ -120,6 +120,29 @@ class VoicePipelineSession:
         logger.info(f"Processing turn #{turn.turn_id} for Call {self.call_sid}: '{user_utterance}'")
         turn.mark_llm_start()
 
+        # Check for human escalation request
+        lower_utterance = user_utterance.lower()
+        if any(kw in lower_utterance for kw in [
+            "transfer me", "speak to a person", "speak to a human", "talk to a person",
+            "talk to a human", "operator", "receptionist", "speak to someone",
+            "human please", "connect me to a representative"
+        ]):
+            logger.warning(f"Escalation requested during Call {self.call_sid}: '{user_utterance}'")
+            from src.services.notification_service import notification_service
+            from src.services.business_store import business_store
+            biz = business_store.get_business(self.business_id)
+            if biz and biz.chat_id:
+                asyncio.create_task(
+                    notification_service.send_escalation_alert(
+                        chat_id=biz.chat_id,
+                        business_name=biz.business_name,
+                        caller_number=self.caller_number,
+                        call_sid=self.call_sid,
+                        reason=user_utterance,
+                        destination_number=biz.escalation_number
+                    )
+                )
+
         # Queue to pass tokens from LLM stream to TTS generator
         token_queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
         first_token_marked = False

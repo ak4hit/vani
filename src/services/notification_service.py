@@ -186,5 +186,83 @@ class NotificationService:
 
         return call_log
 
+    @staticmethod
+    def format_escalation_alert(
+        business_name: str,
+        caller_number: str,
+        call_sid: str,
+        reason: str,
+        destination_number: Optional[str] = None
+    ) -> str:
+        """Format an instant flash alert when a caller requests human transfer."""
+        transfer_display = f"`{destination_number}`" if destination_number else "Staff / Voicemail"
+        return (
+            "🚨 *URGENT: Human Escalation Requested*\n\n"
+            f"• *Business:* {business_name}\n"
+            f"• *Caller:* `{caller_number}`\n"
+            f"• *Call SID:* `{call_sid}`\n"
+            f"• *Intent / Reason:* {reason}\n"
+            f"• *Transfer Destination:* {transfer_display}\n\n"
+            "⚠️ *Action Required:* Call transfer initiated from AI receptionist."
+        )
+
+    async def send_escalation_alert(
+        self,
+        chat_id: int,
+        business_name: str,
+        caller_number: str,
+        call_sid: str,
+        reason: str,
+        destination_number: Optional[str] = None
+    ) -> bool:
+        """Send instant high-priority escalation alert to the business Telegram chat."""
+        alert_msg = self.format_escalation_alert(
+            business_name=business_name,
+            caller_number=caller_number,
+            call_sid=call_sid,
+            reason=reason,
+            destination_number=destination_number
+        )
+        logger.info(f"Sending human escalation alert for CallSid={call_sid} to chat_id={chat_id}")
+        return await self.send_telegram_message(chat_id=chat_id, text=alert_msg)
+
+    @staticmethod
+    def format_missed_call_card(
+        business_name: str,
+        caller_number: str,
+        call_sid: str,
+        call_status: str,
+        timestamp: Optional[str] = None
+    ) -> str:
+        """Format a notification card for missed, busy, or failed calls."""
+        time_display = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        return (
+            "⚠️ *Missed Call Alert*\n\n"
+            f"• *Business:* {business_name}\n"
+            f"• *Caller:* `{caller_number}`\n"
+            f"• *Call Status:* {call_status.upper()}\n"
+            f"• *Call SID:* `{call_sid}`\n"
+            f"• *Timestamp:* {time_display}\n\n"
+            "💡 *Recommendation:* The caller was unable to connect. Consider returning this call."
+        )
+
+    async def send_missed_call_alert(
+        self,
+        chat_id: int,
+        business_name: str,
+        caller_number: str,
+        call_sid: str,
+        call_status: str
+    ) -> bool:
+        """Send missed call notification to business Telegram chat."""
+        card_msg = self.format_missed_call_card(
+            business_name=business_name,
+            caller_number=caller_number,
+            call_sid=call_sid,
+            call_status=call_status
+        )
+        logger.info(f"Sending missed call alert ({call_status}) for CallSid={call_sid} to chat_id={chat_id}")
+        return await self.send_telegram_message(chat_id=chat_id, text=card_msg)
+
 
 notification_service = NotificationService()

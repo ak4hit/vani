@@ -76,6 +76,33 @@ async def inbound_voice_webhook(request: Request):
     return Response(content=twiml_response, media_type="application/xml")
 
 
+@router.post("/status")
+async def twilio_status_callback(request: Request):
+    """Twilio Call Status Callback webhook for missed call and failure detection."""
+    form_data = await request.form()
+    call_sid = form_data.get("CallSid", "UNKNOWN")
+    call_status = form_data.get("CallStatus", "unknown").lower()
+    from_number = form_data.get("From", "UNKNOWN")
+
+    logger.info(f"Twilio status callback: CallSid={call_sid}, Status={call_status}, From={from_number}")
+
+    # Detect missed or failed call states
+    if call_status in ["busy", "no-answer", "canceled", "failed"]:
+        logger.warning(f"Missed/Failed inbound call detected: CallSid={call_sid}, Status={call_status}")
+        from src.services.notification_service import notification_service
+        business = business_store.get_business(settings.DEFAULT_BUSINESS_ID)
+        if business and business.chat_id:
+            await notification_service.send_missed_call_alert(
+                chat_id=business.chat_id,
+                business_name=business.business_name,
+                caller_number=from_number,
+                call_sid=call_sid,
+                call_status=call_status
+            )
+
+    return Response(content="<Response/>", media_type="application/xml")
+
+
 @router.websocket("/stream")
 async def twilio_media_stream_websocket(websocket: WebSocket):
     """Bidirectional WebSocket endpoint for Twilio Media Streams audio."""
