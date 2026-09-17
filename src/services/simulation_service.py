@@ -40,7 +40,28 @@ class SimulationService:
                 chat_id=chat_id
             )
 
-        system_prompt = build_system_prompt(profile)
+        # Retrieve relevant RAG chunks if available
+        retrieved_texts = []
+        try:
+            from src.database.session import get_session_maker
+            from src.services.vector_store import VectorStoreService
+            from src.services.rag.ingestion_service import ingestion_service
+
+            query_vector = await ingestion_service.get_embedding(user_message)
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                matches = await VectorStoreService.search(
+                    session=session,
+                    business_id=profile.business_id,
+                    query_embedding=query_vector,
+                    top_k=3,
+                    score_threshold=0.1
+                )
+                retrieved_texts = [m["content"] for m in matches]
+        except Exception as e:
+            logger.debug(f"RAG retrieval skipped during simulation: {e}")
+
+        system_prompt = build_system_prompt(profile, retrieved_chunks=retrieved_texts)
         llm = self.llm_service_cls(system_prompt=system_prompt)
 
         tokens = []

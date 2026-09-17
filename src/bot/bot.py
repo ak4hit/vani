@@ -1,8 +1,4 @@
-"""Vani Telegram Admin Bot Application Builder and Runner."""
-
-import sys
-from typing import Optional
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from src.config import settings
 from src.utils.logger import get_logger
@@ -26,6 +22,11 @@ from src.bot.handlers.control import (
     status_command,
 )
 from src.bot.handlers.test_cmd import handle_test_command
+from src.bot.handlers.docs import (
+    upload_doc_command,
+    crawl_command,
+    handle_document_upload,
+)
 
 logger = get_logger("vani.bot")
 
@@ -50,6 +51,11 @@ def build_application(token: Optional[str] = None) -> Application:
     app.add_handler(CommandHandler("addfaq", add_faq_command))
     app.add_handler(CommandHandler("listfaqs", list_faqs_command))
     app.add_handler(CommandHandler("removefaq", remove_faq_command))
+
+    # Register Document & Web Ingestion commands
+    app.add_handler(CommandHandler("uploaddoc", upload_doc_command))
+    app.add_handler(CommandHandler("crawl", crawl_command))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document_upload))
 
     # Register Control commands
     app.add_handler(CommandHandler("pause", pause_command))
