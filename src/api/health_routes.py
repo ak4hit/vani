@@ -1,8 +1,10 @@
 """Health check endpoints for Vani service."""
 
 from fastapi import APIRouter
+from fastapi.responses import PlainTextResponse
 from src.config import settings
 from src.services.health_monitor import health_monitor
+from src.services.metrics import metrics_collector
 
 router = APIRouter(tags=["Health"])
 
@@ -28,3 +30,13 @@ async def health_check():
 async def detailed_system_status():
     """Returns comprehensive real-time system diagnostics (active calls, DB, Redis, API keys, quota, errors)."""
     return await health_monitor.get_system_health()
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+async def prometheus_metrics():
+    """Exposes real-time Prometheus telemetry metrics (call counters, latency percentiles, active gauges)."""
+    active_count = health_monitor.call_tracker.get_active_count()
+    return PlainTextResponse(
+        metrics_collector.generate_prometheus_exposition(active_calls_count=active_count),
+        media_type="text/plain; version=0.0.4"
+    )

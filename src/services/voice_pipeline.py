@@ -58,6 +58,11 @@ class VoicePipelineSession:
     async def start(self) -> None:
         """Initializes the STT connection and sends the initial AI disclosure greeting."""
         logger.info(f"Starting VoicePipelineSession for Call {self.call_sid}")
+        from src.services.health_monitor import health_monitor
+        from src.services.metrics import metrics_collector
+        health_monitor.call_tracker.register_call(self.call_sid)
+        metrics_collector.increment_call("completed")
+
         # Connect to Deepgram live WebSocket
         await self.stt.connect(on_transcript=self._handle_transcript)
 
@@ -92,6 +97,8 @@ class VoicePipelineSession:
         if self.bargein.detect_interruption(transcript, is_final):
             cancelled = self.bargein.cancel_active_turn()
             if cancelled:
+                from src.services.metrics import metrics_collector
+                metrics_collector.increment_bargein()
                 self._is_processing_turn = False
                 asyncio.create_task(self._flush_twilio_audio())
 
@@ -195,6 +202,8 @@ class VoicePipelineSession:
             if self.tts.quota_exhausted and not self._quota_alert_sent:
                 self._quota_alert_sent = True
                 logger.warning(f"Quota exhausted for Call {self.call_sid}. Dispatching admin fallback alert.")
+                from src.services.metrics import metrics_collector
+                metrics_collector.increment_tts_quota_exhausted()
                 from src.services.notification_service import notification_service
                 from src.services.business_store import business_store
                 biz = business_store.get_business(self.business_id)
@@ -215,6 +224,14 @@ class VoicePipelineSession:
             self.bargein.clear_turn_task()
             if turn.t_twilio_send:
                 turn.log_metrics()
+                from src.services.metrics import metrics_collector
+                metrics_collector.record_turn_latency(
+                    total_ms=turn.total_turnaround_ms or 0.0,
+                    stt_ms=turn.stt_latency_ms,
+                    llm_ms=turn.llm_ttft_ms,
+                    tts_ms=turn.tts_ttfb_ms,
+                    call_sid=self.call_sid
+                )
             self._is_processing_turn = False
 
     async def _send_audio_chunk(self, mulaw_chunk: bytes) -> None:
@@ -232,6 +249,8 @@ class VoicePipelineSession:
     async def close(self) -> None:
         """Cleans up active connections and triggers background post-call processing."""
         logger.info(f"Closing VoicePipelineSession for Call {self.call_sid}")
+        from src.services.health_monitor import health_monitor
+        health_monitor.call_tracker.unregister_call(self.call_sid)
         await self.stt.close()
 
         duration = int(time.time() - self.start_time)
