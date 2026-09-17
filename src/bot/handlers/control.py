@@ -57,28 +57,16 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
+from src.services.health_monitor import health_monitor
+
+
 @rate_limited()
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Display the real-time operational status and configuration."""
+    """Display the real-time operational status, service diagnostics, and health dashboard."""
     chat_id = update.effective_chat.id
-    biz = business_store.get_or_create_business(f"biz_{chat_id}", chat_id=chat_id)
-    faqs = business_store.list_faqs(biz.business_id)
+    biz = business_store.get_by_chat_id(chat_id)
+    if not biz:
+        biz = business_store.get_or_create_business(f"biz_{chat_id}", chat_id=chat_id)
 
-    status_icon = "⏸️ Paused" if biz.is_paused else "🟢 Live & Active"
-
-    status_text = (
-        "📊 *Vani Voice Bot Status Dashboard*\n\n"
-        f"• *Status:* {status_icon}\n"
-        f"• *Business:* {biz.business_name} ({biz.industry})\n"
-        f"• *AI Persona:* {biz.agent_name}\n"
-        f"• *Operating Hours:* {biz.hours}\n"
-        f"• *Escalation Transfer:* {biz.escalation_number or 'Voicemail fallback'}\n"
-        f"• *Active FAQs:* {len(faqs)}\n"
-        f"• *Phone Forwarding:* {biz.phone_number or 'Not configured'}\n\n"
-        "🔧 *Quick Commands:*\n"
-        "• `/pause` or `/resume` — Toggle call answering\n"
-        "• `/test <message>` — Test AI responses\n"
-        "• `/addfaq` — Add knowledge Q&A\n"
-        "• `/setprompt` — Edit knowledge base"
-    )
+    status_text = await health_monitor.format_telegram_dashboard(biz)
     await update.message.reply_text(status_text, parse_mode="Markdown")

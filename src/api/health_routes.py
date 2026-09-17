@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 from src.config import settings
+from src.services.health_monitor import health_monitor
 
 router = APIRouter(tags=["Health"])
 
@@ -21,3 +22,9 @@ async def health_check():
             "twilio_configured": bool(settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN)
         }
     }
+
+
+@router.get("/api/status")
+async def detailed_system_status():
+    """Returns comprehensive real-time system diagnostics (active calls, DB, Redis, API keys, quota, errors)."""
+    return await health_monitor.get_system_health()
