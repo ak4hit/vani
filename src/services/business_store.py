@@ -23,6 +23,7 @@ class BusinessProfile(BaseModel):
     hours: str = "Mon-Fri 9:00 AM - 6:00 PM"
     phone_number: Optional[str] = None
     escalation_number: Optional[str] = None
+    voice_id: Optional[str] = None
     is_paused: bool = False
     faqs: List[FAQItem] = Field(default_factory=list)
     onboarding_completed: bool = False
@@ -156,6 +157,7 @@ class BusinessStore:
             hours=db_biz.hours,
             phone_number=db_biz.phone_number,
             escalation_number=db_biz.escalation_number,
+            voice_id=db_biz.voice_id,
             is_paused=db_biz.is_paused,
             faqs=faq_items
         )
@@ -186,6 +188,7 @@ class BusinessStore:
             hours=profile.hours,
             phone_number=profile.phone_number,
             escalation_number=profile.escalation_number,
+            voice_id=profile.voice_id,
             is_paused=profile.is_paused
         )
         return db_biz

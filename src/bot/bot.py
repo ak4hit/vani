@@ -1,4 +1,6 @@
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from typing import Optional
+import sys
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 from src.config import settings
 from src.utils.logger import get_logger
@@ -26,6 +28,12 @@ from src.bot.handlers.docs import (
     upload_doc_command,
     crawl_command,
     handle_document_upload,
+)
+from src.bot.handlers.voice import (
+    handle_upload_voice_command,
+    handle_voice_audio_upload,
+    handle_voice_consent_callback,
+    handle_voice_design_command,
 )
 
 logger = get_logger("vani.bot")
@@ -55,7 +63,13 @@ def build_application(token: Optional[str] = None) -> Application:
     # Register Document & Web Ingestion commands
     app.add_handler(CommandHandler("uploaddoc", upload_doc_command))
     app.add_handler(CommandHandler("crawl", crawl_command))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document_upload))
+    app.add_handler(MessageHandler(filters.Document.ALL & ~filters.AUDIO, handle_document_upload))
+
+    # Register Voice Cloning & Voice Design commands
+    app.add_handler(CommandHandler("uploadvoice", handle_upload_voice_command))
+    app.add_handler(CommandHandler("voicedesign", handle_voice_design_command))
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_audio_upload))
+    app.add_handler(CallbackQueryHandler(handle_voice_consent_callback, pattern=r"^consent_voice_"))
 
     # Register Control commands
     app.add_handler(CommandHandler("pause", pause_command))

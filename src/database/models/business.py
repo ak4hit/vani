@@ -14,6 +14,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
+from src.database.models.voice_audit import VoiceConsentAudit
+from src.database.models.document import DocumentChunk
 
 
 class Business(Base):
@@ -33,6 +35,7 @@ class Business(Base):
     hours: Mapped[str] = mapped_column(String(255), default="Mon-Fri 9:00 AM - 6:00 PM", nullable=False)
     phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     escalation_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    voice_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     max_chunks: Mapped[int] = mapped_column(Integer, default=10000, nullable=False)
 
@@ -63,6 +66,12 @@ class Business(Base):
     )
     document_chunks: Mapped[List["DocumentChunk"]] = relationship(
         "DocumentChunk",
+        back_populates="business",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+    voice_audits: Mapped[List["VoiceConsentAudit"]] = relationship(
+        "VoiceConsentAudit",
         back_populates="business",
         cascade="all, delete-orphan",
         lazy="selectin"

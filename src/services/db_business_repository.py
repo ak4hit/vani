@@ -5,6 +5,7 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.models.business import Business, FAQ, CallLog
+from src.database.models.voice_audit import VoiceConsentAudit
 from src.utils.logger import get_logger
 
 logger = get_logger("vani.db.repository")
@@ -152,3 +153,47 @@ class BusinessRepository:
         await session.commit()
         await session.refresh(log)
         return log
+
+    @staticmethod
+    async def record_voice_consent(
+        session: AsyncSession,
+        business_id: str,
+        voice_id: str,
+        voice_name: str,
+        consent_text: str,
+        consent_by_chat_id: Optional[int] = None,
+        sample_filename: Optional[str] = None,
+        consent_confirmed: bool = True
+    ) -> VoiceConsentAudit:
+        """Record an immutable legal voice cloning consent audit entry."""
+        audit = VoiceConsentAudit(
+            business_id=business_id,
+            voice_id=voice_id,
+            voice_name=voice_name,
+            consent_confirmed=consent_confirmed,
+            consent_by_chat_id=consent_by_chat_id,
+            consent_text=consent_text,
+            sample_filename=sample_filename
+        )
+        session.add(audit)
+        await session.commit()
+        await session.refresh(audit)
+        logger.info(
+            f"Voice consent logged for business_id='{business_id}' voice_id='{voice_id}' "
+            f"confirmed={consent_confirmed}"
+        )
+        return audit
+
+    @staticmethod
+    async def list_voice_consents(
+        session: AsyncSession,
+        business_id: str
+    ) -> List[VoiceConsentAudit]:
+        """Fetch all voice consent audit records for a business tenant."""
+        stmt = (
+            select(VoiceConsentAudit)
+            .where(VoiceConsentAudit.business_id == business_id)
+            .order_by(VoiceConsentAudit.id.desc())
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
