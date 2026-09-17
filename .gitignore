@@ -6,6 +6,8 @@ __pycache__/
 .env
 .pytest_cache/
 *.log
+*.db
+*.sqlite3
 
 # Sensitive planning & reference files (do not publish to repository)
 MASTERPLAN.md

@@ -7,6 +7,7 @@ Includes barge-in (interruption) detection.
 """
 
 import asyncio
+import time
 from typing import AsyncGenerator, Callable, List, Optional
 from src.config import settings
 from src.services.audio_utils import mulaw_to_base64
@@ -28,11 +29,16 @@ class VoicePipelineSession:
         call_sid: str,
         stream_sid: str,
         send_to_twilio: Callable[[dict], asyncio.Future],
-        business_prompt: Optional[str] = None
+        business_prompt: Optional[str] = None,
+        caller_number: str = "UNKNOWN",
+        business_id: Optional[str] = None
     ):
         self.call_sid = call_sid
         self.stream_sid = stream_sid
         self.send_to_twilio = send_to_twilio
+        self.caller_number = caller_number
+        self.business_id = business_id or settings.DEFAULT_BUSINESS_ID
+        self.start_time = time.time()
         self.latency_tracker = CallLatencyTracker(call_sid)
 
         # Service instances
@@ -189,6 +195,27 @@ class VoicePipelineSession:
         await self.send_to_twilio(message)
 
     async def close(self) -> None:
-        """Cleans up active connections and session resources."""
+        """Cleans up active connections and triggers background post-call processing."""
         logger.info(f"Closing VoicePipelineSession for Call {self.call_sid}")
         await self.stt.close()
+
+        duration = int(time.time() - self.start_time)
+        # Import dynamically to avoid circular imports
+        from src.services.notification_service import notification_service
+        from src.services.business_store import business_store
+
+        biz = business_store.get_business(self.business_id)
+        chat_id = biz.chat_id if biz else None
+        biz_name = biz.business_name if biz else "Vani Reception"
+
+        asyncio.create_task(
+            notification_service.process_post_call(
+                business_id=self.business_id,
+                call_sid=self.call_sid,
+                caller_number=self.caller_number,
+                duration_seconds=duration,
+                chat_history=self.chat_history,
+                chat_id=chat_id,
+                business_name=biz_name
+            )
+        )
