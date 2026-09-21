@@ -36,6 +36,11 @@ from src.bot.handlers.voice import (
     handle_voice_design_command,
 )
 from src.bot.handlers.privacy import handle_delete_caller_command
+from src.bot.handlers.appointments import (
+    appointments_command,
+    digest_command,
+    cancel_appointment_command,
+)
 
 logger = get_logger("vani.bot")
 
@@ -80,6 +85,11 @@ def build_application(token: Optional[str] = None) -> Application:
 
     # Register Simulation command
     app.add_handler(CommandHandler("test", handle_test_command))
+
+    # Register Appointment scheduling commands (Phase 9)
+    app.add_handler(CommandHandler("appointments", appointments_command))
+    app.add_handler(CommandHandler("digest", digest_command))
+    app.add_handler(CommandHandler("cancelappointment", cancel_appointment_command))
 
     logger.info("Vani Telegram Admin Bot handlers successfully registered.")
     return app

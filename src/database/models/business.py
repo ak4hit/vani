@@ -16,6 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.base import Base
 from src.database.models.voice_audit import VoiceConsentAudit
 from src.database.models.document import DocumentChunk
+from src.database.models.appointment import Appointment
 
 
 class Business(Base):
@@ -72,6 +73,12 @@ class Business(Base):
     )
     voice_audits: Mapped[List["VoiceConsentAudit"]] = relationship(
         "VoiceConsentAudit",
+        back_populates="business",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+    appointments: Mapped[List["Appointment"]] = relationship(
+        "Appointment",
         back_populates="business",
         cascade="all, delete-orphan",
         lazy="selectin"
