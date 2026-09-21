@@ -63,9 +63,15 @@ class LocalDatabaseCalendarAdapter(CalendarAdapter):
                 doctor_id=doctor_id
             )
 
-        # Build booked slot timestamps set (rounded to minute)
+        # Build booked slot timestamps set (rounded to minute, normalized to naive UTC)
+        # SQLite may return naive datetimes; strip tzinfo for consistent comparison.
+        def _to_naive_utc(dt: datetime) -> datetime:
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            return dt.replace(second=0, microsecond=0)
+
         booked_times = {
-            appt.slot_time.astimezone(timezone.utc).replace(second=0, microsecond=0)
+            _to_naive_utc(appt.slot_time)
             for appt in booked_appts
             if appt.status != "CANCELLED"
         }
@@ -77,8 +83,11 @@ class LocalDatabaseCalendarAdapter(CalendarAdapter):
         available_slots: List[datetime] = []
         curr = start_time
         while curr + timedelta(minutes=slot_duration_minutes) <= end_time:
+            # Normalize curr to naive UTC for comparison with booked_times
+            curr_naive = _to_naive_utc(curr)
+
             # Check if booked in DB
-            is_booked = curr in booked_times
+            is_booked = curr_naive in booked_times
 
             # Check if actively locked by another caller in SlotLockManager
             slot_iso = curr.isoformat()
